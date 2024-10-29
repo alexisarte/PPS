@@ -1,7 +1,5 @@
 import { connectDB } from "../../libs/mongodb";
-
 import { NextResponse } from "next/server";
-
 import Tempcol from "../../models/Tempcol";
 
 export async function GET() {
