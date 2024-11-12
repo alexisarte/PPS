@@ -3,6 +3,32 @@ from bson import ObjectId
 import random
 import string
 import spacy
+import requests
+
+# Cargar el modelo de spaCy para español
+nlp = spacy.load("es_core_news_sm")
+
+def es_nombre(texto):
+    doc = nlp(texto)
+    for entidad in doc.ents:
+        if entidad.label_ == "PER":
+            return True
+    return False
+
+def obtener_nombre_ficticio(longitud):
+    while True:
+        response = requests.get('https://randomuser.me/api/?nat=es')
+        if response.status_code == 200:
+            data = response.json()
+            nombre = data['results'][0]['name']['first']
+            if len(nombre) == longitud:
+                return nombre
+            else:
+                print(f"El nombre '{nombre}' no tiene la longitud correcta.")
+                # return ''.join(random.choices(string.ascii_letters, k=longitud))
+        else:
+            # Si la API falla, generar un nombre aleatorio
+            return ''.join(random.choices(string.ascii_letters, k=longitud))
 
 def execute():
     # Conectar a la base de datos
@@ -26,9 +52,8 @@ def execute():
     ]
 
     # Ejecutar el pipeline y procesar todos los screencasts
-    temp_col = db["screencastsewithevents"]
-    anomization_col = db["anomization"]
-    anomization_col.drop()  # Limpiar la colección temporal
+    anonymizations_col = db["anonymizations"]
+    anonymizations_col.drop()  # Limpiar la colección temporal
 
     screencasts = list(collection.aggregate(pipeline, allowDiskUse=True))
 
@@ -44,19 +69,27 @@ def execute():
 
         logs = []
         logsModificados = []
-        max = -1
+        max_length = -1
         input = None
-        saveFirst = True
+        input_text = ''
         for previousEvent, nextEvent in zip(previous, next):
             if previousEvent.get("type"):
                 # input es none cuando un screencast no tiene eventos de tipo input
                 if input is not None:
-                    input_text = input["values"]["data"]["text"]
+                    if es_nombre(input_text):
+                        print(f"El texto '{input_text}' es un nombre.")
+                        nombre_ficticio = obtener_nombre_ficticio(len(input_text))
+                        input["values"]["data"]["text"] = nombre_ficticio
+                        print(f"El nombre '{input_text}' ha sido anonimizado como '{nombre_ficticio}'.")
+                        logsModificados.append(input)
                     if input_text.isdigit():
                         primera_parte = input_text[0:int((len(input_text) / 2))]
                         segunda_parte = input_text[int(len(input_text) / 2):int(len(input_text))]
                         segunda_parte = "".join(["*" for _ in segunda_parte])
-                        input["values"]["data"]["text"] = primera_parte + segunda_parte
+                        if "values" in input:
+                            input["values"]["data"]["text"] = primera_parte + segunda_parte
+                        else:
+                            print('input', input)
                         # Copiar la anonimización a cada subinput
                         for log in logs:
                             log_text = log["values"]["data"]["text"]
@@ -67,22 +100,22 @@ def execute():
                                     end_index = start_index + len(log_text)
                                     log["values"]["data"]["text"] = input["values"]["data"]["text"][start_index:end_index]
                             logsModificados.append(log)
-                    # else:
-                    #     input["values"]["data"]["text"] = ''.join(random.choices(string.ascii_letters + string.digits, k=len(input_text)))
-                    
-                        # anomization_col.insert_one(input)
-                    input = nextEvent
-                    max = len(nextEvent["values"]["data"]["text"])
-                    logs = []
+                input = nextEvent
+
+                if "values" in nextEvent and "data" in nextEvent["values"] and "text" in nextEvent["values"]["data"]:
+                    max_length = len(nextEvent["values"]["data"]["text"])
+                logs = []
             else:
-                if len(previousEvent["values"]["data"]["text"]) > max:
-                    input = previousEvent
-                    max = len(previousEvent["values"]["data"]["text"])
-                if previousEvent["values"]["data"]["text"].isdigit():
+                if "values" in previousEvent and "data" in previousEvent["values"] and "text" in previousEvent["values"]["data"]:
+                    if len(previousEvent["values"]["data"]["text"]) > max_length:
+                        input = previousEvent
+                        input_text = previousEvent["values"]["data"]["text"]
+                        max_length = len(previousEvent["values"]["data"]["text"])
+                if "values" in previousEvent and "data" in previousEvent["values"] and "text" in previousEvent["values"]["data"]:
                     logs.append(previousEvent)
         cast['logs'] = logsModificados
         logsModificados = []
-        anomization_col.insert_one(cast) 
+        anonymizations_col.insert_one(cast) 
     print("Anonimización completada para todos los screencasts")
 
 # Ejecutar el script
