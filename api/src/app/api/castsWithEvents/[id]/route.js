@@ -1,6 +1,6 @@
 import { connectDB } from "../../../libs/mongodb";
 import { NextResponse } from "next/server";
-import Tempcol from "../../../models/Tempcol";
+import ScreencastsWithEvents from "../../../models/ScreencastsWithEvents.js";
 
 export async function GET(request, { params }) {
   try {
@@ -11,13 +11,13 @@ export async function GET(request, { params }) {
       return NextResponse.json({ error: "ID is required" }, { status: 400 });
     }
 
-    const tempcol = await Tempcol.findById(id);
+    const screencastWithEvents = await ScreencastsWithEvents.findById(id);
 
-    if (!tempcol) {
-      return NextResponse.json({ error: "tempcol not found" }, { status: 404 });
+    if (!screencastWithEvents) {
+      return NextResponse.json({ error: "screencastWithEvents not found" }, { status: 404 });
     }
 
-    return NextResponse.json(tempcol);
+    return NextResponse.json(screencastWithEvents);
   } catch (error) {
     return NextResponse.error({
       status: 500,

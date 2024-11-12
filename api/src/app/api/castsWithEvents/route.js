@@ -1,11 +1,11 @@
 import { connectDB } from "../../libs/mongodb";
 import { NextResponse } from "next/server";
-import Tempcol from "../../models/Tempcol";
+import ScreencastsWithEvents from "../../models/ScreencastsWithEvents.js";
 
 export async function GET() {
   await connectDB();
 
-  const casts = await Tempcol.find({});
+  const casts = await ScreencastsWithEvents.find({});
 
   return NextResponse.json(casts);
 }
