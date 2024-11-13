@@ -15,20 +15,13 @@ def es_nombre(texto):
             return True
     return False
 
-def obtener_nombre_ficticio(longitud):
-    while True:
-        response = requests.get('https://randomuser.me/api/?nat=es')
-        if response.status_code == 200:
-            data = response.json()
-            nombre = data['results'][0]['name']['first']
-            if len(nombre) == longitud:
-                return nombre
-            else:
-                print(f"El nombre '{nombre}' no tiene la longitud correcta.")
-                # return ''.join(random.choices(string.ascii_letters, k=longitud))
-        else:
-            # Si la API falla, generar un nombre aleatorio
-            return ''.join(random.choices(string.ascii_letters, k=longitud))
+def obtener_nombre_ficticio_con_espacios(texto):
+    palabras = texto.split()  # Dividir por espacios
+    palabras_ficticias = []
+    for palabra in palabras:
+        palabra_ficticia = ''.join(random.choices(string.ascii_letters, k=len(palabra)))
+        palabras_ficticias.append(palabra_ficticia)
+    return ' '.join(palabras_ficticias)  # Reconstruir el texto con los espacios originales
 
 def execute():
     # Conectar a la base de datos
@@ -37,19 +30,7 @@ def execute():
     collection = db["screencastswithevents"]
 
     # Pipeline de agregación para todos los screencasts
-    pipeline = [
-        # {
-        #     '$match': { 
-        #         '_id': ObjectId("5f595f9256a02beea66b3825")
-        #     }
-        # },
-        # {
-        #     "$group": {
-        #         "_id": "$_id",
-        #         "logs": {"$push": "$logs"},
-        #     }
-        # },
-    ]
+    pipeline = []
 
     # Ejecutar el pipeline y procesar todos los screencasts
     anonymizations_col = db["anonymizations"]
@@ -57,7 +38,6 @@ def execute():
 
     screencasts = list(collection.aggregate(pipeline, allowDiskUse=True))
 
-    # Procesar cada screencast en los resultados de la consulta
     for cast in screencasts:
         if len(cast['logs']) < 2:
             continue  # Saltar si no hay suficientes eventos
@@ -73,33 +53,43 @@ def execute():
         input = None
         input_text = ''
         for previousEvent, nextEvent in zip(previous, next):
+            borrados = []
+            error_positions = []
             if previousEvent.get("type"):
-                # input es none cuando un screencast no tiene eventos de tipo input
                 if input is not None:
                     if es_nombre(input_text):
                         print(f"El texto '{input_text}' es un nombre.")
-                        nombre_ficticio = obtener_nombre_ficticio(len(input_text))
+                        # ver si hubo errores mientras se escribia el nombre, es decir recorres los subinputs y ver si se borró un caracter y se modifico
+                        # previousLogs = logs.copy()
+                        # nextLogs = logs.copy()
+                        # previousLogs.pop()
+                        # nextLogs.pop(0)
+                        # for previousLog, nextLog in zip(previousLogs, nextLogs):
+                        #     if len(previousLog["values"]["data"]["text"]) > len(nextLog["values"]["data"]["text"]):
+                        #         borrados.append()
+
+                        nombre_ficticio = obtener_nombre_ficticio_con_espacios(input_text)
                         input["values"]["data"]["text"] = nombre_ficticio
                         print(f"El nombre '{input_text}' ha sido anonimizado como '{nombre_ficticio}'.")
                         logsModificados.append(input)
                     if input_text.isdigit():
                         primera_parte = input_text[0:int((len(input_text) / 2))]
-                        segunda_parte = input_text[int(len(input_text) / 2):int(len(input_text))]
-                        segunda_parte = "".join(["*" for _ in segunda_parte])
+                        segunda_parte = "".join(["*" for _ in input_text[int(len(input_text) / 2):]])
                         if "values" in input:
                             input["values"]["data"]["text"] = primera_parte + segunda_parte
-                        else:
-                            print('input', input)
-                        # Copiar la anonimización a cada subinput
                         for log in logs:
                             log_text = log["values"]["data"]["text"]
                             if log_text.isdigit():
-                                # Encontrar la posición del subinput en el input final
                                 start_index = input_text.find(log_text)
                                 if start_index != -1:
                                     end_index = start_index + len(log_text)
                                     log["values"]["data"]["text"] = input["values"]["data"]["text"][start_index:end_index]
                             logsModificados.append(log)
+                        obj = {
+                            "type": "inputEnd",
+                            "timestamp": input["values"]["timestamp"] + 1
+                        }
+                        logsModificados.append(obj)
                 input = nextEvent
 
                 if "values" in nextEvent and "data" in nextEvent["values"] and "text" in nextEvent["values"]["data"]:
