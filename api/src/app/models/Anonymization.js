@@ -1,8 +1,7 @@
 import mongoose from "mongoose";
 
 const AnonymizationSchema = new mongoose.Schema({
-  events: [],
-  eventDetails: [],
+  logs: [],
 });
 
 export default mongoose.models.Anonymization ||
