@@ -3,7 +3,7 @@ from bson import ObjectId
 import random
 import string
 import spacy
-import requests
+import re
 
 # Cargar el modelo de spaCy para español
 nlp = spacy.load("es_core_news_sm")
@@ -14,6 +14,11 @@ def es_nombre(texto):
         if entidad.label_ == "PER":
             return True
     return False
+
+def is_email(texto):
+    regex = r"\"?([-a-zA-Z0-9.`?{}]+@\w+\.\w+)\"?"
+    return re.match(regex, texto)
+
 
 def obtener_input_anonimizado_con_espacios(texto):
     palabras = texto.split()  # Dividir por espacios
@@ -34,7 +39,6 @@ def anonimizar_subinputs(logs, input, input_text, input_anonimizado, logsModific
         # Reemplazar las posiciones en las que difiere el caracter de log comparado al subinput correspondiente
         for i in range(min(len(log_text_lista), len(input_text_lista))):  # Iterar hasta el mínimo de los dos
             if log_text_lista[i] != input_text_lista[i]:
-                print(f"Error en la posición {i}: {log_text_lista[i]} != {input_text_lista[i]}")
                 errors.append(i)
         # Convertir la lista de nuevo en una cadena
         sub_input_anonimizado = input_anonimizado[start_index:end_index]
@@ -87,7 +91,13 @@ def execute():
             if previousEvent.get("type") == "inputEnd":
                 print(f"previousEvent: {previousEvent['type']}")
                 if input is not None:
-                    if es_nombre(input_text):
+                    if is_email(input_text):
+                        primera_parte = input_text[0:input_text.index('@')]
+                        input_anonimizado = obtener_input_anonimizado_con_espacios(primera_parte)
+                        input_anonimizado += input_text[input_text.index('@'):]
+                        anonimizar_subinputs(logs, input, input_text, input_anonimizado, logsModificados)
+                        print(f"El email '{input_text}' ha sido anonimizado como '{input_anonimizado}'.")
+                    elif es_nombre(input_text):
                         print(f"El texto '{input_text}' es un nombre.")
                         input_anonimizado = obtener_input_anonimizado_con_espacios(input_text)
                         anonimizar_subinputs(logs, input, input_text, input_anonimizado, logsModificados)
