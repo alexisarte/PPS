@@ -1,5 +1,4 @@
 from pymongo import MongoClient
-from bson import ObjectId 
 import random
 import string
 import spacy
@@ -13,6 +12,7 @@ def es_nombre(texto):
     for entidad in doc.ents:
         if entidad.label_ == "PER":
             return True
+    print(f"{texto}, no es un nombre")
     return False
 
 def is_email(texto):
@@ -42,7 +42,10 @@ def anonimizar_subinputs(logs, input, input_text, input_anonimizado, logsModific
                 errors.append(i)
         # Convertir la lista de nuevo en una cadena
         sub_input_anonimizado = input_anonimizado[start_index:end_index]
-        log["values"]["data"]["text"] = reemplazar_errores_con_michis(sub_input_anonimizado, errors)
+        if len(input_anonimizado) != len(log["values"]["data"]["text"]):
+            log["values"]["data"]["text"] = reemplazar_errores_con_michis(sub_input_anonimizado, errors)
+        else:
+            log["values"]["data"]["text"] = sub_input_anonimizado
         logsModificados.append(log)
     obj = {
         "type": "inputEnd",
@@ -87,37 +90,36 @@ def execute():
         input = None
         input_text = ''
 
+        errores = []
+
         for previousEvent, nextEvent in zip(previous, next):
             if previousEvent.get("type") == "inputEnd":
-                print(f"previousEvent: {previousEvent['type']}")
+                # print(f"previousEvent: {previousEvent['type']}")
                 if input is not None:
                     if is_email(input_text):
                         primera_parte = input_text[0:input_text.index('@')]
                         input_anonimizado = obtener_input_anonimizado_con_espacios(primera_parte)
                         input_anonimizado += input_text[input_text.index('@'):]
                         anonimizar_subinputs(logs, input, input_text, input_anonimizado, logsModificados)
-                        print(f"El email '{input_text}' ha sido anonimizado como '{input_anonimizado}'.")
-                    elif es_nombre(input_text):
-                        print(f"El texto '{input_text}' es un nombre.")
-                        input_anonimizado = obtener_input_anonimizado_con_espacios(input_text)
-                        anonimizar_subinputs(logs, input, input_text, input_anonimizado, logsModificados)
-                        print(f"El nombre '{input_text}' ha sido anonimizado como '{input_anonimizado}'.")
                     elif input_text.isdigit():
                         primera_parte = input_text[0:int((len(input_text) / 2))]
                         segunda_parte = "".join(["*" for _ in input_text[int(len(input_text) / 2):]])
                         input_anonimizado = primera_parte + segunda_parte
                         anonimizar_subinputs(logs, input, input_text, input_anonimizado, logsModificados)
-
+                    elif es_nombre(input_text):
+                        print(f"El texto '{input_text}' es un nombre.")
+                        input_anonimizado = obtener_input_anonimizado_con_espacios(input_text)
+                        anonimizar_subinputs(logs, input, input_text, input_anonimizado, logsModificados)
                 input = nextEvent
                 max_length = len(nextEvent["values"]["data"]["text"])
                 input_text = nextEvent["values"]["data"]["text"]
                 logs = []
-
             else:
                 if len(previousEvent["values"]["data"]["text"]) >= max_length:
                     input = previousEvent
                     input_text = previousEvent["values"]["data"]["text"]
                     max_length = len(previousEvent["values"]["data"]["text"])
+                    
                 logs.append(previousEvent)
 
         cast['logs'] = logsModificados
