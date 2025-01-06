@@ -6,4 +6,4 @@ const ScreencastSchema = new mongoose.Schema({
   eventDetails: [],
 });
 
-export default mongoose.models.Screencast || mongoose.model('Screencast', ScreencastSchema);
+export default mongoose.models.Screencastsevent || mongoose.model('Screencastsevent', ScreencastSchema);
